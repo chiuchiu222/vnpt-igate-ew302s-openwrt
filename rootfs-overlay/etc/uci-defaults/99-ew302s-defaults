@@ -1,0 +1,46 @@
+#!/bin/sh
+
+uci -q batch <<EOF
+# Network LAN / WAN
+set network.lan.ipaddr='192.168.77.1'
+set network.lan.netmask='255.255.255.0'
+commit network
+
+# Firewall Flow Offloading & Hardware HNAT
+set firewall.@defaults[0].flow_offloading='1'
+set firewall.@defaults[0].flow_offloading_hw='1'
+commit firewall
+
+# Wi-Fi 6 (MT7981 AX3000) 2.4GHz & 5GHz HE160
+set wireless.radio0.disabled='0'
+set wireless.radio0.country='VN'
+set wireless.radio0.htmode='HE40'
+set wireless.radio1.disabled='0'
+set wireless.radio1.country='VN'
+set wireless.radio1.channel='36'
+set wireless.radio1.htmode='HE160'
+commit wireless
+
+# LED Automations
+set system.led_power=led
+set system.led_power.name='Power'
+set system.led_power.sysfs='ew302s:power'
+set system.led_power.trigger='default-on'
+
+set system.led_wan=led
+set system.led_wan.name='WAN'
+set system.led_wan.sysfs='ew302s:wan_l'
+set system.led_wan.trigger='netdev'
+set system.led_wan.dev='eth1'
+set system.led_wan.mode='link tx rx'
+
+set system.led_inet=led
+set system.led_inet.name='Internet'
+set system.led_inet.sysfs='ew302s:inet_l'
+set system.led_inet.trigger='netdev'
+set system.led_inet.dev='br-lan'
+set system.led_inet.mode='link tx rx'
+commit system
+EOF
+
+exit 0

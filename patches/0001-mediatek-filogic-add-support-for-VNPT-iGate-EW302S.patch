@@ -1,0 +1,358 @@
+From ac83e2c26dcc5affa01e8c1a09f45c32f090c5f1 Mon Sep 17 00:00:00 2001
+From: DevOps Agent <devops@openwrt-ew302s.local>
+Date: Thu, 29 Oct 2026 22:04:33 +0700
+Subject: [PATCH] mediatek: filogic: add support for VNPT iGate EW302S
+
+Hardware specifications:
+- SoC: MediaTek MT7981B (Filogic 820) Dual-core Cortex-A53 @ 1.3GHz
+- RAM: 256 MiB DDR3
+- Flash: 128 MiB SPI-NAND (Winbond W25N01KV)
+- Ethernet GMAC0: SGMII with Airoha EN8801SC 1Gbps PHY (MDIO 0x18, TX polarity reverse)
+- Ethernet GMAC1: RGMII/GMAC with internal MediaTek MT7981 1Gbps PHY
+- Wi-Fi: MediaTek MT7981B / MT7915E AX3000 Wi-Fi 6 (2x2 2.4GHz HE40 + 2x2 5GHz HE160)
+- LEDs: 5 LEDs (Power, Inet L/R, WAN L/R)
+- Button: WPS (GPIO 0)
+- Default IP: 192.168.77.1
+- Features: Hardware NAT (HNAT) enabled, fixed MAC from Factory partition
+---
+ .../dts/mt7981b-vnpt-igate-ew302s.dts         | 222 ++++++++++++++++++
+ .../mediatek/files/drivers/net/phy/en8801sc.c |  12 +-
+ .../filogic/base-files/etc/board.d/02_network |   3 +
+ .../base-files/lib/upgrade/platform.sh        |  11 +
+ target/linux/mediatek/image/filogic.mk        |  21 ++
+ 5 files changed, 268 insertions(+), 1 deletion(-)
+ create mode 100755 target/linux/mediatek/dts/mt7981b-vnpt-igate-ew302s.dts
+
+diff --git a/target/linux/mediatek/dts/mt7981b-vnpt-igate-ew302s.dts b/target/linux/mediatek/dts/mt7981b-vnpt-igate-ew302s.dts
+new file mode 100755
+index 0000000..ac7a866
+--- /dev/null
++++ b/target/linux/mediatek/dts/mt7981b-vnpt-igate-ew302s.dts
+@@ -0,0 +1,222 @@
++// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
++
++/dts-v1/;
++#include <dt-bindings/gpio/gpio.h>
++#include <dt-bindings/input/input.h>
++#include <dt-bindings/leds/common.h>
++#include "mt7981b.dtsi"
++
++/ {
++	model = "VNPT iGate EW302S";
++	compatible = "vnpt,igate-ew302s", "mediatek,mt7981";
++
++	aliases {
++		serial0 = &uart0;
++		led-boot = &led_power;
++		led-failsafe = &led_power;
++		led-running = &led_power;
++		led-upgrade = &led_power;
++		label-mac-device = &gmac0;
++	};
++
++	chosen {
++		stdout-path = "serial0:115200n8";
++	};
++
++	memory@40000000 {
++		reg = <0 0x40000000 0 0x10000000>;
++	};
++
++	gpio-keys {
++		compatible = "gpio-keys";
++
++		wps {
++			label = "wps";
++			linux,code = <KEY_WPS_BUTTON>;
++			gpios = <&pio 0 GPIO_ACTIVE_LOW>;
++		};
++	};
++
++	leds {
++		compatible = "gpio-leds";
++
++		led_power: power {
++			label = "ew302s:power";
++			gpios = <&pio 8 GPIO_ACTIVE_LOW>;
++			default-state = "on";
++		};
++
++		inet_l {
++			label = "ew302s:inet_l";
++			gpios = <&pio 9 GPIO_ACTIVE_LOW>;
++		};
++
++		wan_l {
++			label = "ew302s:wan_l";
++			gpios = <&pio 10 GPIO_ACTIVE_LOW>;
++		};
++
++		wan_r {
++			label = "ew302s:wan_r";
++			gpios = <&pio 11 GPIO_ACTIVE_LOW>;
++		};
++
++		inet_r {
++			label = "ew302s:inet_r";
++			gpios = <&pio 13 GPIO_ACTIVE_LOW>;
++		};
++	};
++};
++
++&eth {
++	pinctrl-names = "default";
++	pinctrl-0 = <&mdio_pins>;
++	status = "okay";
++
++	gmac0: mac@0 {
++		compatible = "mediatek,eth-mac";
++		reg = <0>;
++		phy-mode = "sgmii";
++		managed = "in-band-status";
++		phy-handle = <&en8801sc>;
++		nvmem-cells = <&macaddr_factory_4 1>;
++		nvmem-cell-names = "mac-address";
++	};
++
++	gmac1: mac@1 {
++		compatible = "mediatek,eth-mac";
++		reg = <1>;
++		phy-mode = "gmii";
++		phy-handle = <&int_gbe_phy>;
++		nvmem-cells = <&macaddr_factory_4 2>;
++		nvmem-cell-names = "mac-address";
++	};
++};
++
++&mdio_bus {
++	en8801sc: ethernet-phy@24 {
++		reg = <24>;
++		compatible = "ethernet-phy-id03a2.9471";
++		phy-mode = "sgmii";
++		reset-gpios = <&pio 39 GPIO_ACTIVE_LOW>;
++		reset-assert-us = <10000>;
++		reset-deassert-us = <20000>;
++	};
++};
++
++&sgmiisys0 {
++	/delete-property/ mediatek,pnswap;
++};
++
++&pio {
++	spi0_flash_pins: spi0-pins {
++		mux {
++			function = "spi";
++			groups = "spi0", "spi0_wp_hold";
++		};
++
++		conf-pu {
++			pins = "SPI0_CS", "SPI0_HOLD", "SPI0_WP";
++			drive-strength = <8>;
++			bias-pull-up = <103>;
++		};
++
++		conf-pd {
++			pins = "SPI0_CLK", "SPI0_MOSI", "SPI0_MISO";
++			drive-strength = <8>;
++			bias-pull-down = <103>;
++		};
++	};
++};
++
++&spi0 {
++	pinctrl-names = "default";
++	pinctrl-0 = <&spi0_flash_pins>;
++	status = "okay";
++
++	spi_nand: flash@0 {
++		#address-cells = <1>;
++		#size-cells = <1>;
++		compatible = "spi-nand";
++		reg = <0>;
++		spi-max-frequency = <52000000>;
++		spi-tx-bus-width = <4>;
++		spi-rx-bus-width = <4>;
++
++		spi-cal-enable;
++		spi-cal-mode = "read-data";
++		spi-cal-datalen = <7>;
++		spi-cal-data = /bits/ 8 <0x53 0x50 0x49 0x4e 0x41 0x4e 0x44>;
++		spi-cal-addrlen = <5>;
++		spi-cal-addr = /bits/ 32 <0x0 0x0 0x0 0x0 0x0>;
++
++		mediatek,nmbm;
++		mediatek,bmt-max-ratio = <1>;
++		mediatek,bmt-max-reserved-blocks = <64>;
++
++		partitions {
++			compatible = "fixed-partitions";
++			#address-cells = <1>;
++			#size-cells = <1>;
++
++			partition@0 {
++				label = "BL2";
++				reg = <0x000000 0x100000>;
++				read-only;
++			};
++
++			partition@100000 {
++				label = "u-boot-env";
++				reg = <0x100000 0x080000>;
++			};
++
++			factory: partition@180000 {
++				label = "Factory";
++				reg = <0x180000 0x200000>;
++				read-only;
++
++				nvmem-layout {
++					compatible = "fixed-layout";
++					#address-cells = <1>;
++					#size-cells = <1>;
++
++					eeprom_factory: eeprom@0 {
++						reg = <0x0 0x1000>;
++					};
++
++					macaddr_factory_4: macaddr@4 {
++						compatible = "mac-base";
++						reg = <0x4 0x6>;
++						#nvmem-cell-cells = <1>;
++					};
++				};
++			};
++
++			partition@380000 {
++				label = "FIP";
++				reg = <0x380000 0x200000>;
++				read-only;
++			};
++
++			partition@580000 {
++				label = "ubi";
++				reg = <0x580000 0x4000000>;
++				compatible = "linux,ubi";
++			};
++		};
++	};
++};
++
++&uart0 {
++	status = "okay";
++};
++
++&watchdog {
++	status = "okay";
++};
++
++&wifi {
++	nvmem-cells = <&eeprom_factory>;
++	nvmem-cell-names = "eeprom";
++	status = "okay";
++};
+diff --git a/target/linux/mediatek/files/drivers/net/phy/en8801sc.c b/target/linux/mediatek/files/drivers/net/phy/en8801sc.c
+index 08774e3..6ff9fbb 100644
+--- a/target/linux/mediatek/files/drivers/net/phy/en8801sc.c
++++ b/target/linux/mediatek/files/drivers/net/phy/en8801sc.c
+@@ -480,7 +480,7 @@ static int en8801s_phase1_init(struct phy_device *phydev)
+ 	mdelay(500);
+ 	pbus_data = (pbus_data & ~BIT(2)) |
+ 				EN8801S_RX_POLARITY_NORMAL |
+-				EN8801S_TX_POLARITY_NORMAL;
++				EN8801S_TX_POLARITY_REVERSE;
+ 	ret = airoha_pbus_write(mbus, pbus_addr,
+ 				EN8801S_RG_LTR_CTL, pbus_data);
+ 	if (ret < 0)
+@@ -574,6 +574,16 @@ static int en8801s_phase2_init(struct phy_device *phydev)
+ 	struct device *dev = phydev_dev(phydev);
+ 	struct en8801s_priv *priv = phydev->priv;
+ 
++	pbus_data = airoha_pbus_read(mbus, pbus_addr, EN8801S_RG_LTR_CTL);
++	ret = airoha_pbus_write(mbus, pbus_addr, EN8801S_RG_LTR_CTL, pbus_data | 0x13);
++	if (ret < 0)
++		return ret;
++	mdelay(10);
++	pbus_data = (pbus_data & ~0x10) | EN8801S_RX_POLARITY_NORMAL | EN8801S_TX_POLARITY_REVERSE;
++	ret = airoha_pbus_write(mbus, pbus_addr, EN8801S_RG_LTR_CTL, pbus_data);
++	if (ret < 0)
++		return ret;
++
+ 	pbus_data = airoha_pbus_read(mbus, pbus_addr, 0x1690);
+ 	pbus_data |= BIT(31);
+ 	ret = airoha_pbus_write(mbus, pbus_addr, 0x1690, pbus_data);
+diff --git a/target/linux/mediatek/filogic/base-files/etc/board.d/02_network b/target/linux/mediatek/filogic/base-files/etc/board.d/02_network
+index 921afdd..34594bc 100644
+--- a/target/linux/mediatek/filogic/base-files/etc/board.d/02_network
++++ b/target/linux/mediatek/filogic/base-files/etc/board.d/02_network
+@@ -8,6 +8,9 @@ mediatek_setup_interfaces()
+ 	local board="$1"
+ 
+ 	case $board in
++	vnpt,igate-ew302s)
++		ucidef_set_interfaces_lan_wan "eth0" "eth1"
++		;;
+ 	abt,asr3000|\
+ 	buffalo,wsr-6000ax8|\
+ 	cmcc,rax3000m|\
+diff --git a/target/linux/mediatek/filogic/base-files/lib/upgrade/platform.sh b/target/linux/mediatek/filogic/base-files/lib/upgrade/platform.sh
+index c21c3d6..df69f5c 100644
+--- a/target/linux/mediatek/filogic/base-files/lib/upgrade/platform.sh
++++ b/target/linux/mediatek/filogic/base-files/lib/upgrade/platform.sh
+@@ -344,6 +344,13 @@ platform_do_upgrade() {
+ 		CI_DATA_UBIPART=ubi
+ 		nand_do_upgrade "$1"
+ 		;;
++	vnpt,igate-ew302s)
++		CI_UBIPART="ubi"
++		CI_KERNPART="kernel"
++		CI_ROOTPART="rootfs"
++		CI_DATAPART="rootfs_data"
++		nand_do_upgrade "$1"
++		;;
+ 	*)
+ 		nand_do_upgrade "$1"
+ 		;;
+@@ -358,6 +365,10 @@ platform_check_image() {
+ 	[ "$#" -gt 1 ] && return 1
+ 
+ 	case "$board" in
++	vnpt,igate-ew302s)
++		nand_do_platform_check "vnpt_igate_ew302s" "$1"
++		return $?
++		;;
+ 	abt,asr3000|\
+ 	acer,predator-w6x-ubootmod|\
+ 	asus,zenwifi-bt8-ubootmod|\
+diff --git a/target/linux/mediatek/image/filogic.mk b/target/linux/mediatek/image/filogic.mk
+index 1722359..efc52c7 100644
+--- a/target/linux/mediatek/image/filogic.mk
++++ b/target/linux/mediatek/image/filogic.mk
+@@ -4122,3 +4122,24 @@ ifneq ($(CONFIG_TARGET_ROOTFS_INITRAMFS),)
+ endif
+ endef
+ TARGET_DEVICES += zyxel_wx5600-t0-ubootmod
++
++define Device/vnpt_igate_ew302s
++  DEVICE_VENDOR := VNPT
++  DEVICE_MODEL := iGate EW302S
++  SUPPORTED_DEVICES := vnpt,igate-ew302s vnpt,igate,ew302s
++  DEVICE_DTS := mt7981b-vnpt-igate-ew302s
++  DEVICE_DTS_DIR := ../dts
++  UBINIZE_OPTS := -E 5
++  BLOCKSIZE := 128k
++  PAGESIZE := 2048
++  KERNEL_IN_UBI := 1
++  IMAGES := sysupgrade.bin
++  KERNEL_INITRAMFS_SUFFIX := .itb
++  KERNEL := kernel-bin | lzma | \
++	fit lzma $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb
++  KERNEL_INITRAMFS := kernel-bin | lzma | \
++	fit lzma $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb with-initrd | pad-to 64k
++  IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
++  DEVICE_PACKAGES := kmod-mt7915e kmod-mt7981-firmware mt7981-wo-firmware
++endef
++TARGET_DEVICES += vnpt_igate_ew302s
+-- 
+2.53.0
+
